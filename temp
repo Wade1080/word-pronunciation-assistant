@@ -1,0 +1,14 @@
+length > 5 && void 0 !== arguments[5] ? arguments[5] : 1, p = arguments.length > 6 && void 0 !== arguments[6] ? arguments[6] : "web", h = arguments.length > 7 && void 0 !== arguments[7] ? arguments[7] : 1, f = arguments.length > 8 && void 0 !== arguments[8] ? arguments[8] : "web", b = arguments.length > 9 && void 0 !== arguments[9] ? arguments[9] : 1, m = arguments.length > 10 && void 0 !== arguments[10] ? arguments[10] : 1, v = arguments.length > 11 && void 0 !== arguments[11] ? arguments[11] : 1, g = arguments.length > 12 && void 0 !== arguments[12] ? arguments[12] : "wifi", y = arguments.length > 13 && void 0 !== arguments[13] ? arguments[13] : "abcdefg", _ = Object.assign({
+                    product: o,
+                    appVersion: d,
+                    client: p,
+                    mid: h,
+                    vendor: f,
+                    screen: b,
+                    model: m,
+                    imei: v,
+                    network: g,
+                    keyfrom: s,
+                    keyid: r,
+                    mysticTime: Date.now(),
+                    yduuid: y

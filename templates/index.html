@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单词发音助手</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .word-card {
+            transition: all 0.3s ease;
+        }
+        .word-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .history-item, .wordbook-item {
+            transition: all 0.2s ease;
+        }
+        .history-item:hover, .wordbook-item:hover {
+            background-color: #f3f4f6;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #1e40af;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">单词发音助手</h1>
+        
+        <!-- 搜索框 -->
+        <div class="max-w-xl mx-auto mb-8">
+            <div class="relative">
+                <input type="text" id="wordInput" 
+                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="输入要查询的单词...">
+                <button onclick="getPronunciation()" 
+                    class="absolute right-2 top-2 bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 transition duration-200">
+                    获取发音
+                </button>
+            </div>
+        </div>
+
+        <!-- 发音卡片 -->
+        <div id="pronunciationCard" class="max-w-xl mx-auto mb-8 hidden">
+            <div class="word-card bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 id="currentWord" class="text-2xl font-semibold text-gray-800"></h2>
+                    <div class="flex items-center space-x-4">
+                        <button onclick="toggleWordbook()" id="wordbookBtn" class="text-gray-500 hover:text-yellow-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                            </svg>
+                        </button>
+                        <button onclick="playAudio()" class="text-blue-500 hover:text-blue-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.95 4.95a9 9 0 010 14.1M11 5l-7 7h4v4l7-7h-4V5z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 翻译 -->
+                <div id="translations" class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 mb-2">中文释义</h3>
+                    <div id="translationList" class="space-y-1"></div>
+                </div>
+
+                <!-- 例句 -->
+                <div id="examples">
+                    <h3 class="text-sm font-medium text-gray-500 mb-2">例句</h3>
+                    <div id="exampleList" class="space-y-4"></div>
+                </div>
+
+                <audio id="pronunciationAudio" class="hidden"></audio>
+            </div>
+        </div>
+
+        <!-- 加载动画 -->
+        <div id="loading" class="hidden flex justify-center items-center">
+            <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+
+        <!-- 标签页 -->
+        <div class="max-w-xl mx-auto">
+            <div class="flex border-b border-gray-200 mb-4">
+                <button onclick="switchTab('history')" id="historyTab" class="px-4 py-2 text-gray-600 hover:text-gray-800 tab-active">
+                    最近查询
+                </button>
+                <button onclick="switchTab('wordbook')" id="wordbookTab" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                    单词本
+                </button>
+            </div>
+            
+            <!-- 历史记录 -->
+            <div id="historyPanel" class="bg-white rounded-lg shadow-sm border border-gray-200"></div>
+            
+            <!-- 单词本 -->
+            <div id="wordbookPanel" class="bg-white rounded-lg shadow-sm border border-gray-200 hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        let audioCache = new Map();
+        let history = [];
+        let wordbook = new Set(JSON.parse(localStorage.getItem('wordbook') || '[]'));
+        let currentWord = '';
+
+        function switchTab(tab) {
+            // 更新标签样式
+            document.getElementById('historyTab').classList.toggle('tab-active', tab === 'history');
+            document.getElementById('wordbookTab').classList.toggle('tab-active', tab === 'wordbook');
+            
+            // 显示/隐藏面板
+            document.getElementById('historyPanel').classList.toggle('hidden', tab !== 'history');
+            document.getElementById('wordbookPanel').classList.toggle('hidden', tab !== 'wordbook');
+            
+            // 更新UI
+            if (tab === 'history') {
+                updateHistoryUI();
+            } else {
+                updateWordbookUI();
+            }
+        }
+
+        function toggleWordbook() {
+            if (!currentWord) return;
+            
+            const btn = document.getElementById('wordbookBtn');
+            if (wordbook.has(currentWord)) {
+                wordbook.delete(currentWord);
+                btn.classList.remove('text-yellow-500');
+                btn.classList.add('text-gray-500');
+            } else {
+                wordbook.add(currentWord);
+                btn.classList.remove('text-gray-500');
+                btn.classList.add('text-yellow-500');
+            }
+            
+            // 保存到localStorage
+            localStorage.setItem('wordbook', JSON.stringify([...wordbook]));
+            
+            // 更新单词本UI
+            updateWordbookUI();
+        }
+
+        function updateWordbookUI() {
+            const wordbookDiv = document.getElementById('wordbookPanel');
+            if (wordbook.size === 0) {
+                wordbookDiv.innerHTML = '<div class="p-4 text-gray-500 text-center">单词本还是空的，快去添加单词吧！</div>';
+                return;
+            }
+            
+            wordbookDiv.innerHTML = [...wordbook].map(word => `
+                <div class="wordbook-item p-3 border-b border-gray-200 flex justify-between items-center">
+                    <span class="text-gray-700">${word}</span>
+                    <div class="flex items-center space-x-3">
+                        <button class="text-blue-500 hover:text-blue-600" onclick="playHistoryAudio('${word}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.95 4.95a9 9 0 010 14.1M11 5l-7 7h4v4l7-7h-4V5z" />
+                            </svg>
+                        </button>
+                        <button class="text-red-500 hover:text-red-600" onclick="removeFromWordbook('${word}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function removeFromWordbook(word) {
+            wordbook.delete(word);
+            localStorage.setItem('wordbook', JSON.stringify([...wordbook]));
+            updateWordbookUI();
+            
+            // 如果是当前单词，更新按钮状态
+            if (word === currentWord) {
+                const btn = document.getElementById('wordbookBtn');
+                btn.classList.remove('text-yellow-500');
+                btn.classList.add('text-gray-500');
+            }
+        }
+
+        async function getPronunciation() {
+            const word = document.getElementById('wordInput').value.trim();
+            if (!word) return;
+
+            // 显示加载动画
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('pronunciationCard').classList.add('hidden');
+
+            try {
+                // 并行请求发音和单词信息
+                const [pronunciationResponse, wordInfoResponse] = await Promise.all([
+                    fetch(`/api/pronounce?word=${encodeURIComponent(word)}`),
+                    fetch(`/api/word_info?word=${encodeURIComponent(word)}`)
+                ]);
+
+                if (!pronunciationResponse.ok) throw new Error('获取发音失败');
+                if (!wordInfoResponse.ok) throw new Error('获取单词信息失败');
+
+                const [blob, wordInfo] = await Promise.all([
+                    pronunciationResponse.blob(),
+                    wordInfoResponse.json()
+                ]);
+
+                const audioUrl = URL.createObjectURL(blob);
+                
+                // 缓存音频
+                audioCache.set(word, audioUrl);
+                
+                // 更新历史记录
+                addToHistory(word);
+                
+                // 更新当前单词
+                currentWord = word;
+                
+                // 显示发音卡片和单词信息
+                document.getElementById('currentWord').textContent = word;
+                const audio = document.getElementById('pronunciationAudio');
+                audio.src = audioUrl;
+                document.getElementById('pronunciationCard').classList.remove('hidden');
+                
+                // 更新翻译
+                const translationList = document.getElementById('translationList');
+                translationList.innerHTML = wordInfo.data.translations
+                    .map(trans => `<div class="text-gray-700">${trans}</div>`)
+                    .join('');
+
+                // 更新例句
+                const exampleList = document.getElementById('exampleList');
+                exampleList.innerHTML = wordInfo.data.examples
+                    .map(example => `
+                        <div class="example-item">
+                            <div class="text-gray-700 mb-1">${example.en}</div>
+                            <div class="text-gray-500 text-sm">${example.cn}</div>
+                        </div>
+                    `)
+                    .join('');
+                
+                // 更新收藏按钮状态
+                const btn = document.getElementById('wordbookBtn');
+                if (wordbook.has(word)) {
+                    btn.classList.remove('text-gray-500');
+                    btn.classList.add('text-yellow-500');
+                } else {
+                    btn.classList.remove('text-yellow-500');
+                    btn.classList.add('text-gray-500');
+                }
+                
+                // 自动播放
+                playAudio();
+            } catch (error) {
+                alert('获取单词信息失败：' + error.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function playAudio() {
+            const audio = document.getElementById('pronunciationAudio');
+            audio.play();
+        }
+
+        function addToHistory(word) {
+            const index = history.indexOf(word);
+            if (index > -1) {
+                history.splice(index, 1);
+            }
+            history.unshift(word);
+            if (history.length > 10) history.pop();
+            updateHistoryUI();
+        }
+
+        function updateHistoryUI() {
+            const historyDiv = document.getElementById('historyPanel');
+            if (history.length === 0) {
+                historyDiv.innerHTML = '<div class="p-4 text-gray-500 text-center">还没有查询记录哦！</div>';
+                return;
+            }
+            
+            historyDiv.innerHTML = history.map(word => `
+                <div class="history-item p-3 border-b border-gray-200 flex justify-between items-center cursor-pointer"
+                    onclick="loadHistoryWord('${word}')">
+                    <span class="text-gray-700">${word}</span>
+                    <button class="text-blue-500 hover:text-blue-600" onclick="event.stopPropagation(); playHistoryAudio('${word}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.95 4.95a9 9 0 010 14.1M11 5l-7 7h4v4l7-7h-4V5z" />
+                        </svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function loadHistoryWord(word) {
+            document.getElementById('wordInput').value = word;
+            getPronunciation();
+        }
+
+        async function playHistoryAudio(word) {
+            if (audioCache.has(word)) {
+                const audio = new Audio(audioCache.get(word));
+                audio.play();
+            } else {
+                document.getElementById('wordInput').value = word;
+                await getPronunciation();
+            }
+        }
+
+        // 添加回车键监听
+        document.getElementById('wordInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getPronunciation();
+            }
+        });
+
+        // 初始化UI
+        updateHistoryUI();
+        updateWordbookUI();
+    </script>
+</body>
+</html> 
